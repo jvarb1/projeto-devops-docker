@@ -3,9 +3,9 @@ from typing import Optional
 from datetime import datetime
 
 class TaskBase(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200, description="Título da tarefa")
-    description: Optional[str] = Field(None, max_length=1000, description="Descrição da tarefa")
-    status: str = Field(default="pending", description="Status da tarefa")
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    status: str = Field(default="pending")
 
 class TaskCreate(TaskBase):
     pass
@@ -13,7 +13,7 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
-    status: Optional[str] = Field(None, description="Status da tarefa")
+    status: Optional[str] = None
 
 class TaskResponse(TaskBase):
     id: int

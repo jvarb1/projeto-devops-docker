@@ -1,17 +1,14 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
-import os
 from database import get_db, engine, Base
 from models import Task
 from schemas import TaskCreate, TaskResponse, TaskUpdate
 import logging
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Criar tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -22,7 +19,6 @@ app = FastAPI(
 
 @app.get("/")
 async def root():
-    """Endpoint raiz da API"""
     return {
         "message": "API de Tarefas - CRUD",
         "status": "running",
@@ -31,7 +27,6 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Verifica a saúde da aplicação"""
     return {
         "status": "healthy",
         "service": "task-api"
@@ -39,7 +34,6 @@ async def health_check():
 
 @app.post("/tasks", response_model=TaskResponse, status_code=201)
 async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
-    """Cria uma nova tarefa"""
     try:
         db_task = Task(
             title=task.title,
@@ -58,7 +52,6 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 
 @app.get("/tasks", response_model=List[TaskResponse])
 async def list_tasks(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Lista todas as tarefas"""
     try:
         tasks = db.query(Task).offset(skip).limit(limit).all()
         logger.info(f"Total de tarefas retornadas: {len(tasks)}")
@@ -69,7 +62,6 @@ async def list_tasks(skip: int = 0, limit: int = 100, db: Session = Depends(get_
 
 @app.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: int, db: Session = Depends(get_db)):
-    """Obtém uma tarefa específica por ID"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
@@ -77,7 +69,6 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
 
 @app.put("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depends(get_db)):
-    """Atualiza uma tarefa existente"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
@@ -101,7 +92,6 @@ async def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depen
 
 @app.delete("/tasks/{task_id}", status_code=204)
 async def delete_task(task_id: int, db: Session = Depends(get_db)):
-    """Deleta uma tarefa"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")

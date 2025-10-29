@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # Serviço do Banco de Dados PostgreSQL
   db:
     image: postgres:15-alpine
     container_name: taskdb-postgres
@@ -24,7 +21,6 @@ services:
     ports:
       - "${DB_PORT:-5432}:5432"
 
-  # Serviço da Aplicação
   app:
     build:
       context: .
@@ -53,13 +49,11 @@ services:
       retries: 3
       start_period: 40s
 
-# Rede customizada para isolamento dos containers
 networks:
   app-network:
     driver: bridge
     name: taskapp-network
 
-# Volumes para persistência de dados
 volumes:
   postgres_data:
     name: taskdb_data
