@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Serviço do Banco de Dados PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: taskdb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-taskdb}
+      POSTGRES_USER: ${DB_USER:-taskuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-taskpassword}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=pt_BR.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-taskuser} -d ${DB_NAME:-taskdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "${DB_PORT:-5432}:5432"
+
+  # Serviço da Aplicação
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskapi-app
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-taskdb}
+      DB_USER: ${DB_USER:-taskuser}
+      DB_PASSWORD: ${DB_PASSWORD:-taskpassword}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Rede customizada para isolamento dos containers
+networks:
+  app-network:
+    driver: bridge
+    name: taskapp-network
+
+# Volumes para persistência de dados
+volumes:
+  postgres_data:
+    name: taskdb_data
+    driver: local
+
