@@ -84,6 +84,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    timeout-minutes: 15
     
     steps:
       - name: Checkout code
@@ -105,27 +106,21 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
+            set -e
+            
             if ! command -v git &> /dev/null; then
-              echo "Git nao encontrado. Instalando..."
-              if command -v yum &> /dev/null; then
-                sudo yum install -y git
-              elif command -v apt-get &> /dev/null; then
-                sudo apt-get update && sudo apt-get install -y git
-              fi
+              echo "ERRO: Git nao esta instalado. Execute o script scripts/install-server.sh primeiro."
+              exit 1
             fi
             
             if ! command -v docker &> /dev/null; then
-              echo "Docker nao encontrado. Instalando..."
-              curl -fsSL https://get.docker.com -o get-docker.sh
-              sudo sh get-docker.sh
-              sudo usermod -aG docker $USER
-              rm -f get-docker.sh
+              echo "ERRO: Docker nao esta instalado. Execute o script scripts/install-server.sh primeiro."
+              exit 1
             fi
             
             if ! command -v docker compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
-              echo "Docker Compose nao encontrado. Instalando..."
-              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
+              echo "ERRO: Docker Compose nao esta instalado. Execute o script scripts/install-server.sh primeiro."
+              exit 1
             fi
             
             PROJECT_DIR="$HOME/projeto-devops-docker"
@@ -144,11 +139,19 @@ jobs:
             git reset --hard origin/main
             git clean -fd
             
-            docker compose -f docker-compose.prod.yml pull app || docker-compose -f docker-compose.prod.yml pull app
+            DOCKER_COMPOSE_CMD="docker compose"
+            if ! command -v docker compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            fi
             
-            docker compose -f docker-compose.prod.yml up -d --no-deps app || docker-compose -f docker-compose.prod.yml up -d --no-deps app
+            echo "Baixando nova imagem do Docker Hub..."
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml pull app
             
-            docker compose -f docker-compose.prod.yml ps || docker-compose -f docker-compose.prod.yml ps
+            echo "Reiniciando container da aplicacao..."
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --no-deps app
+            
+            echo "Status dos containers:"
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps
 
       - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.0
@@ -159,7 +162,18 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             cd "$HOME/projeto-devops-docker"
-            sleep 10
-            docker compose -f docker-compose.prod.yml ps || docker-compose -f docker-compose.prod.yml ps
-            docker compose -f docker-compose.prod.yml logs app --tail=20 || docker-compose -f docker-compose.prod.yml logs app --tail=20
+            
+            DOCKER_COMPOSE_CMD="docker compose"
+            if ! command -v docker compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            fi
+            
+            echo "Aguardando containers iniciarem..."
+            sleep 15
+            
+            echo "Status dos containers:"
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps
+            
+            echo "Ultimos logs da aplicacao:"
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml logs app --tail=30
 
