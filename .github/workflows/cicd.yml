@@ -105,12 +105,21 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            cd ~/projeto-devops-docker || cd /opt/projeto-devops-docker || cd ~/projeto-devops || exit 1
+            PROJECT_DIR="$HOME/projeto-devops-docker"
             
-            export IMAGE_TAG=main-${{ github.sha }}
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "Diretorio nao existe. Clonando repositorio..."
+              git clone https://github.com/jvarb1/projeto-devops-docker.git "$PROJECT_DIR"
+            fi
+            
+            cd "$PROJECT_DIR"
+            
+            export IMAGE_TAG=main-$(git rev-parse --short HEAD)
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
             
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
             
             docker compose -f docker-compose.prod.yml pull app
             
@@ -126,7 +135,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            cd ~/projeto-devops-docker || cd /opt/projeto-devops-docker || cd ~/projeto-devops || exit 1
+            cd "$HOME/projeto-devops-docker"
             sleep 10
             docker compose -f docker-compose.prod.yml ps
             docker compose -f docker-compose.prod.yml logs app --tail=20
