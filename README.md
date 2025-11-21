@@ -508,16 +508,28 @@ Antes do primeiro deploy, você precisa configurar o servidor manualmente:
    ssh usuario@seu-servidor.com
    ```
 
-2. **Instalar Docker e Docker Compose:**
+2. **Instalar Git, Docker e Docker Compose:**
    ```bash
-   # Ubuntu/Debian
+   # Instalar Git
+   sudo yum install -y git
+   # ou para Ubuntu/Debian:
+   # sudo apt-get update && sudo apt-get install -y git
+   
+   # Instalar Docker
    curl -fsSL https://get.docker.com -o get-docker.sh
    sudo sh get-docker.sh
    sudo usermod -aG docker $USER
+   newgrp docker
+   rm -f get-docker.sh
    
    # Instalar Docker Compose
    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
    sudo chmod +x /usr/local/bin/docker-compose
+   
+   # Verificar instalacao
+   git --version
+   docker --version
+   docker compose version
    ```
 
 3. **Clonar o repositório:**
