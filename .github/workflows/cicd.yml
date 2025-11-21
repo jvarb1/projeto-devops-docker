@@ -57,7 +57,7 @@ jobs:
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}
           tags: |
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,format=long
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -71,10 +71,13 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      - name: Output image tag
+      - name: Set image tag for deploy
+        id: image-tag
         run: |
-          echo "IMAGE_TAG=${{ steps.meta.outputs.tags }}" >> $GITHUB_ENV
-          echo "Built and pushed image with tags: ${{ steps.meta.outputs.tags }}"
+          SHA=$(git rev-parse --short HEAD)
+          IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:main-${SHA}"
+          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Built and pushed image with tag: ${IMAGE_TAG}"
 
   deploy:
     name: Deploy to Production
@@ -86,12 +89,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract image tag
+      - name: Get image tag from build job
         id: image-tag
         run: |
           SHA=$(git rev-parse --short HEAD)
-          echo "tag=${SHA}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${SHA}"
+          IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/projeto-devops:main-${SHA}"
+          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Using image tag: ${IMAGE_TAG}"
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.0
@@ -103,7 +107,7 @@ jobs:
           script: |
             cd ~/projeto-devops-docker || cd /opt/projeto-devops-docker || cd ~/projeto-devops || exit 1
             
-            export IMAGE_TAG=${{ steps.image-tag.outputs.tag }}
+            export IMAGE_TAG=main-${{ github.sha }}
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
             
             git pull origin main
