@@ -2,6 +2,8 @@
 
 Este projeto implementa uma aplicação CRUD completa utilizando FastAPI e PostgreSQL, configurada com Docker Compose, volumes persistentes, rede customizada e variáveis de ambiente.
 
+> **Status do CI/CD**: Pipeline automatizado configurado e funcionando.
+
 ## 📋 Índice
 
 - [Visão Geral](#visão-geral)
