@@ -509,6 +509,22 @@ Antes do primeiro deploy, você precisa configurar o servidor manualmente:
    ```
 
 2. **Instalar Git, Docker e Docker Compose:**
+
+   **Opção A - Script Automático (Recomendado):**
+   ```bash
+   # Clonar o repositório primeiro (ou baixar o script)
+   git clone https://github.com/jvarb1/projeto-devops-docker.git
+   cd projeto-devops-docker
+   
+   # Executar script de instalação
+   chmod +x scripts/install-server.sh
+   ./scripts/install-server.sh
+   
+   # Após instalação, aplicar permissões Docker
+   newgrp docker
+   ```
+
+   **Opção B - Instalação Manual:**
    ```bash
    # Instalar Git
    sudo yum install -y git
