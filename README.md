@@ -12,6 +12,7 @@ Este projeto implementa uma aplicação CRUD completa utilizando FastAPI e Postg
 - [Testando a API](#testando-a-api)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Recursos Implementados](#recursos-implementados)
+- [CI/CD](#cicd)
 - [Segurança](#segurança)
 - [Troubleshooting](#troubleshooting)
 
@@ -268,6 +269,8 @@ ProjetoDevOps/
 - [x] **CRUD Completo**: API REST completa com operações Create, Read, Update, Delete
 - [x] **Segurança**: Usuário específico para aplicação (não usa root)
 - [x] **Documentação**: README.md completo e detalhado
+- [x] **CI/CD**: Pipeline automatizado com GitHub Actions
+- [x] **Testes Unitários**: Cobertura completa das rotas CRUD
 
 ### 🔒 Segurança Implementada
 
@@ -450,12 +453,160 @@ docker network inspect taskapp-network
    docker-compose ps           # Ver status
    ```
 
+## 🚀 CI/CD
+
+![CI/CD Pipeline](https://github.com/jvarb1/projeto-devops-docker/workflows/CI/CD%20Pipeline/badge.svg)
+
+Este projeto implementa um pipeline completo de Integração Contínua (CI) e Entrega Contínua (CD) usando GitHub Actions.
+
+### Pipeline de CI/CD
+
+O pipeline é executado automaticamente a cada push na branch `main` e realiza as seguintes etapas:
+
+1. **Testes Unitários** (`test`)
+   - Executa todos os testes unitários usando pytest
+   - Valida que todas as rotas CRUD estão funcionando corretamente
+   - Falha no pipeline se algum teste não passar
+
+2. **Build e Push da Imagem Docker** (`build-and-push`)
+   - Constrói a imagem Docker da aplicação
+   - Marca a imagem com o SHA do commit e `latest`
+   - Envia a imagem para o Docker Hub
+   - Só executa se os testes passarem
+
+3. **Deploy Automático** (`deploy`)
+   - Conecta-se ao servidor de produção via SSH
+   - Atualiza o código do repositório
+   - Baixa a nova imagem do Docker Hub
+   - Reinicia os containers com a nova versão
+   - Verifica se o deploy foi bem-sucedido
+
+### Configuração de Secrets
+
+Para que o pipeline funcione, você precisa configurar os seguintes secrets no GitHub:
+
+1. **DOCKER_USERNAME**: Seu usuário do Docker Hub
+2. **DOCKER_PASSWORD**: Sua senha ou token de acesso do Docker Hub
+3. **SSH_HOST**: IP ou domínio do seu servidor de produção
+4. **SSH_USER**: Usuário para conexão SSH no servidor
+5. **SSH_KEY**: Chave privada SSH para autenticação
+6. **SSH_PORT**: Porta SSH (padrão: 22, opcional)
+
+#### Como configurar os Secrets:
+
+1. Acesse: `https://github.com/SEU_USUARIO/projeto-devops-docker/settings/secrets/actions`
+2. Clique em "New repository secret"
+3. Adicione cada secret com seu respectivo valor
+4. Salve
+
+### Configuração Inicial do Servidor
+
+Antes do primeiro deploy, você precisa configurar o servidor manualmente:
+
+1. **Conectar ao servidor via SSH:**
+   ```bash
+   ssh usuario@seu-servidor.com
+   ```
+
+2. **Instalar Docker e Docker Compose:**
+   ```bash
+   # Ubuntu/Debian
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sudo sh get-docker.sh
+   sudo usermod -aG docker $USER
+   
+   # Instalar Docker Compose
+   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+   sudo chmod +x /usr/local/bin/docker-compose
+   ```
+
+3. **Clonar o repositório:**
+   ```bash
+   cd ~
+   git clone https://github.com/SEU_USUARIO/projeto-devops-docker.git
+   cd projeto-devops-docker
+   ```
+
+4. **Criar arquivo `.env` de produção:**
+   ```bash
+   nano .env
+   ```
+   
+   Conteúdo do `.env`:
+   ```env
+   DB_NAME=taskdb
+   DB_USER=taskuser
+   DB_PASSWORD=senha_segura_producao
+   DB_PORT=5432
+   APP_PORT=8000
+   DOCKER_USERNAME=seu_usuario_dockerhub
+   IMAGE_TAG=latest
+   ```
+
+5. **Verificar permissões:**
+   ```bash
+   # Garantir que o usuário está no grupo docker
+   sudo usermod -aG docker $USER
+   newgrp docker
+   ```
+
+6. **Testar manualmente (primeira vez):**
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+
+### Estrutura do Pipeline
+
+```
+Push para main
+    ↓
+[1] Testes Unitários
+    ├─ Instala dependências
+    ├─ Executa pytest
+    └─ ✅ Passa ou ❌ Falha
+    ↓ (se passar)
+[2] Build & Push Docker
+    ├─ Build da imagem
+    ├─ Tag com SHA do commit
+    └─ Push para Docker Hub
+    ↓ (se sucesso)
+[3] Deploy Automático
+    ├─ SSH no servidor
+    ├─ Git pull
+    ├─ Pull da nova imagem
+    └─ Restart dos containers
+    ↓
+✅ Aplicação atualizada!
+```
+
+### Executar Testes Localmente
+
+Para executar os testes antes de fazer push:
+
+```bash
+# Instalar dependências de teste
+pip install -r requirements.txt
+
+# Executar todos os testes
+pytest tests/ -v
+
+# Executar um teste específico
+pytest tests/test_tasks.py::test_create_task -v
+```
+
+### Monitoramento do Pipeline
+
+- Acesse a aba **Actions** no GitHub para ver o status do pipeline
+- Badge de status no topo do README mostra o status atual
+- Logs detalhados disponíveis em cada execução do workflow
+
 ## 📝 Notas Adicionais
 
 - A aplicação cria automaticamente as tabelas no primeiro acesso
 - O banco é inicializado com o script `init-db.sql` na primeira criação
 - Logs são exibidos em tempo real via `docker-compose logs`
 - Health checks garantem que a aplicação só inicie quando o banco estiver pronto
+- O pipeline de CI/CD garante que apenas código testado seja deployado em produção
 
 ## 🤝 Contribuindo
 
