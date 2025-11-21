@@ -17,7 +17,10 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(f"Não foi possível criar tabelas na inicialização: {e}")
 
 @app.get("/")
 async def root():
