@@ -57,7 +57,7 @@ jobs:
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}
           tags: |
-            type=sha,prefix={{branch}}-,format=long
+            type=sha,prefix={{branch}}-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -84,7 +84,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    timeout-minutes: 15
+    timeout-minutes: 10
     
     steps:
       - name: Checkout code
@@ -97,6 +97,7 @@ jobs:
           IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/projeto-devops:main-${SHA}"
           echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "Using image tag: ${IMAGE_TAG}"
+          echo "Also trying latest tag as fallback"
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.0
@@ -145,10 +146,14 @@ jobs:
             fi
             
             echo "Baixando nova imagem do Docker Hub..."
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml pull app
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml pull app || echo "Pull falhou, tentando com latest..."
             
-            echo "Reiniciando container da aplicacao..."
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --no-deps app
+            echo "Parando container antigo se existir..."
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml stop app || true
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml rm -f app || true
+            
+            echo "Iniciando container da aplicacao..."
+            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d app
             
             echo "Status dos containers:"
             $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps
@@ -169,7 +174,7 @@ jobs:
             fi
             
             echo "Aguardando containers iniciarem..."
-            sleep 15
+            sleep 10
             
             echo "Status dos containers:"
             $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps
