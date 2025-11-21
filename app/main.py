@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
-from database import get_db, engine, Base
-from models import Task
-from schemas import TaskCreate, TaskResponse, TaskUpdate
+from app.database import get_db, engine, Base
+from app.models import Task
+from app.schemas import TaskCreate, TaskResponse, TaskUpdate
 import logging
 
 logging.basicConfig(level=logging.INFO)
