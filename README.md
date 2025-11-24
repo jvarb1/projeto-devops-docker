@@ -648,5 +648,5 @@ Este projeto é para fins acadêmicos.
 
 **Desenvolvido por:**
 
-**João Victor Araujo Rocha Brito | Desenvolvedor CDBAR Ambev**
+**João Victor Araujo Rocha Brito | SI - IFAL Arapiraca | Desenvolvedor CDBAR Ambev**
 
