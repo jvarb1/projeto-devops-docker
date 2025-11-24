@@ -84,7 +84,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    timeout-minutes: 30
+    timeout-minutes: 120
     
     steps:
       - name: Checkout code
