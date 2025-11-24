@@ -646,7 +646,7 @@ Este é um projeto acadêmico desenvolvido para demonstrar conhecimentos em Dock
 
 Este projeto é para fins acadêmicos.
 
----
+**Desenvolvido por:**
 
-**Desenvolvido para o curso de DevOps** | **2024**
+**João Victor Araujo Rocha Brito | Desenvolvedor CDBAR Ambev**
 
