@@ -84,7 +84,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    timeout-minutes: 10
+    timeout-minutes: 30
     
     steps:
       - name: Checkout code
@@ -106,6 +106,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 30m
           script: |
             set -e
             
@@ -165,6 +166,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 10m
           script: |
             cd "$HOME/projeto-devops-docker"
             
