@@ -1,5 +1,10 @@
 name: CI/CD Pipeline
 
+# Pipeline automatizado de CI/CD que executa:
+# 1. Testes unitários (pytest)
+# 2. Build e push da imagem Docker para Docker Hub
+# 3. Deploy automático no servidor de produção via SSH
+
 on:
   push:
     branches:
