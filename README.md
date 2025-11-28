@@ -503,87 +503,121 @@ Para que o pipeline funcione, você precisa configurar os seguintes secrets no G
 
 ### Configuração Inicial do Servidor
 
-Antes do primeiro deploy, você precisa configurar o servidor manualmente:
+Antes do primeiro deploy, você precisa configurar o servidor manualmente. Este guia foi testado em **Oracle Linux 9** com **VM.Standard.E2.1.Micro** (1 OCPU, 1GB RAM).
 
-1. **Conectar ao servidor via SSH:**
-   ```bash
-   ssh usuario@seu-servidor.com
-   ```
+#### 1. Conectar ao servidor via SSH
 
-2. **Instalar Git, Docker e Docker Compose:**
+```bash
+ssh -i ~/.ssh/sua-chave.pem opc@IP_DO_SERVIDOR
+```
 
-   **Opção A - Script Automático (Recomendado):**
-   ```bash
-   # Clonar o repositório primeiro (ou baixar o script)
-   git clone https://github.com/jvarb1/projeto-devops-docker.git
-   cd projeto-devops-docker
-   
-   # Executar script de instalação
-   chmod +x scripts/install-server.sh
-   ./scripts/install-server.sh
-   
-   # Após instalação, aplicar permissões Docker
-   newgrp docker
-   ```
+#### 2. Criar Swap (IMPORTANTE para VMs com pouca memória)
 
-   **Opção B - Instalação Manual:**
-   ```bash
-   # Instalar Git
-   sudo yum install -y git
-   # ou para Ubuntu/Debian:
-   # sudo apt-get update && sudo apt-get install -y git
-   
-   # Instalar Docker
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
-   sudo usermod -aG docker $USER
-   newgrp docker
-   rm -f get-docker.sh
-   
-   # Instalar Docker Compose
-   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-   sudo chmod +x /usr/local/bin/docker-compose
-   
-   # Verificar instalacao
-   git --version
-   docker --version
-   docker compose version
-   ```
+VMs com 1GB de RAM precisam de swap para evitar que processos sejam "Killed" por falta de memória:
 
-3. **Clonar o repositório:**
-   ```bash
-   cd ~
-   git clone https://github.com/SEU_USUARIO/projeto-devops-docker.git
-   cd projeto-devops-docker
-   ```
+```bash
+# Criar arquivo de swap de 2GB
+sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
 
-4. **Criar arquivo `.env` de produção:**
-   ```bash
-   nano .env
-   ```
-   
-   Conteúdo do `.env`:
-   ```env
-   DB_NAME=taskdb
-   DB_USER=taskuser
-   DB_PASSWORD=senha_segura_producao
-   DB_PORT=5432
-   APP_PORT=8000
-   DOCKER_USERNAME=seu_usuario_dockerhub
-   IMAGE_TAG=latest
-   ```
+# Tornar o swap permanente
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
-5. **Verificar permissões:**
-   ```bash
-   # Garantir que o usuário está no grupo docker
-   sudo usermod -aG docker $USER
-   newgrp docker
-   ```
+# Verificar
+free -h
+```
 
-6. **Testar manualmente (primeira vez):**
-   ```bash
-   docker compose -f docker-compose.prod.yml up -d
-   ```
+#### 3. Instalar Git, Podman e Docker Compose
+
+**Para Oracle Linux 9** (usa Podman como emulador do Docker):
+
+```bash
+# Instalar Git (com repositórios limitados para economizar memória)
+sudo dnf install git --disablerepo="*" --enablerepo="ol9_baseos*" --enablerepo="ol9_appstream*" -y
+
+# Instalar Podman (emula Docker)
+sudo dnf install docker --disablerepo="*" --enablerepo="ol9_baseos*" --enablerepo="ol9_appstream*" -y
+
+# Instalar Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Verificar instalações
+git --version
+docker --version
+docker-compose --version
+```
+
+#### 4. Habilitar Socket do Podman (IMPORTANTE)
+
+O Podman precisa do socket habilitado para funcionar com docker-compose:
+
+```bash
+# Habilitar lingering (permite serviços do usuário sem login)
+sudo loginctl enable-linger opc
+
+# Habilitar o socket do Podman
+systemctl --user enable --now podman.socket
+
+# Verificar se está funcionando
+systemctl --user status podman.socket
+docker ps
+```
+
+#### 5. Adicionar Chave SSH do GitHub Actions
+
+Adicione a chave pública que será usada pelo GitHub Actions ao arquivo `authorized_keys`:
+
+```bash
+cat >> ~/.ssh/authorized_keys << 'EOF'
+SUA_CHAVE_PUBLICA_AQUI
+EOF
+```
+
+#### 6. Clonar o Repositório
+
+```bash
+cd ~
+git clone https://github.com/jvarb1/projeto-devops-docker.git
+cd projeto-devops-docker
+```
+
+#### 7. Criar arquivo `.env` de produção
+
+```bash
+cat > .env << 'EOF'
+DB_NAME=taskdb
+DB_USER=taskuser
+DB_PASSWORD=SenhaSegura123
+DB_PORT=5432
+APP_PORT=8000
+DOCKER_USERNAME=jvarb1
+IMAGE_TAG=latest
+EOF
+```
+
+> ⚠️ **IMPORTANTE**: Este arquivo contém senhas e NÃO deve ser commitado no repositório!
+
+#### 8. Testar manualmente (primeira vez)
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+docker-compose -f docker-compose.prod.yml ps
+```
+
+### Observações Importantes para Oracle Linux 9
+
+1. **Podman vs Docker**: Oracle Linux 9 usa Podman como substituto do Docker. O pacote `podman-docker` fornece compatibilidade com comandos `docker`.
+
+2. **Socket do Podman**: É necessário habilitar `podman.socket` para que o docker-compose funcione corretamente.
+
+3. **Lingering**: O comando `loginctl enable-linger` permite que os serviços do usuário continuem rodando mesmo após logout.
+
+4. **Swap**: VMs com pouca memória (1GB) precisam de swap para evitar que o OOM Killer mate processos durante instalações.
+
+5. **Locale do PostgreSQL**: O arquivo `docker-compose.prod.yml` usa `--locale=C` em vez de `pt_BR.UTF-8` porque a imagem Alpine não possui locales brasileiros.
 
 ### Estrutura do Pipeline
 
@@ -632,11 +666,34 @@ pytest tests/test_tasks.py::test_create_task -v
 
 ## 📝 Notas Adicionais
 
-- A aplicação cria automaticamente as tabelas no primeiro acesso
-- O banco é inicializado com o script `init-db.sql` na primeira criação
+- A aplicação cria automaticamente as tabelas no primeiro acesso via SQLAlchemy
 - Logs são exibidos em tempo real via `docker-compose logs`
 - Health checks garantem que a aplicação só inicie quando o banco estiver pronto
 - O pipeline de CI/CD garante que apenas código testado seja deployado em produção
+- Em produção, usamos Podman como runtime de containers (compatível com Docker)
+- O deploy é feito automaticamente a cada push na branch `main`
+
+## 🔧 Troubleshooting de Deploy
+
+### Erro: "Killed" durante instalação de pacotes
+**Causa**: VM com pouca memória (OOM Killer)
+**Solução**: Criar swap de 2GB conforme instruções acima
+
+### Erro: "Cannot connect to Docker daemon" com Podman
+**Causa**: Socket do Podman não está habilitado
+**Solução**: 
+```bash
+sudo loginctl enable-linger $USER
+systemctl --user enable --now podman.socket
+```
+
+### Erro: "Permission denied" no init-db.sql
+**Causa**: Podman rootless tem restrições de permissão em volumes
+**Solução**: O arquivo `docker-compose.prod.yml` não monta o `init-db.sql` em produção
+
+### Erro: Locale "pt_BR.UTF-8" não encontrado
+**Causa**: Imagem Alpine do PostgreSQL não possui locales brasileiros
+**Solução**: Usamos `--locale=C` no `docker-compose.prod.yml`
 
 ## 🤝 Contribuindo
 
