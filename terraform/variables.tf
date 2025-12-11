@@ -16,10 +16,18 @@ variable "fingerprint" {
   sensitive   = true
 }
 
-variable "private_key_path" {
-  description = "Caminho para a chave privada da API"
+variable "private_key" {
+  description = "Conteúdo da chave privada da API (para uso no Terraform Cloud)"
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "private_key_path" {
+  description = "Caminho para a chave privada da API (para uso local)"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "compartment_ocid" {
