@@ -8,17 +8,17 @@ Este projeto implementa uma aplicação CRUD completa utilizando FastAPI e Postg
 
 ## 📋 Índice
 
-- [Visão Geral](#visão-geral)
-- [Arquitetura](#arquitetura)
-- [Pré-requisitos](#pré-requisitos)
-- [Configuração](#configuração)
-- [Executando a Aplicação](#executando-a-aplicação)
-- [Testando a API](#testando-a-api)
-- [Estrutura do Projeto](#estrutura-do-projeto)
-- [Recursos Implementados](#recursos-implementados)
-- [CI/CD](#cicd)
-- [Segurança](#segurança)
-- [Troubleshooting](#troubleshooting)
+- [🎯 Visão Geral](#-visão-geral)
+- [🏗️ Arquitetura](#️-arquitetura)
+- [📦 Pré-requisitos](#-pré-requisitos)
+- [⚙️ Configuração](#️-configuração)
+- [🚀 Executando a Aplicação](#-executando-a-aplicação)
+- [🧪 Testando a API](#-testando-a-api)
+- [📁 Estrutura do Projeto](#-estrutura-do-projeto)
+- [✨ Recursos Implementados](#-recursos-implementados)
+- [🏗️ Infraestrutura como Código (IaC)](#️-infraestrutura-como-código-iac)
+- [🚀 CI/CD](#-cicd)
+- [🔧 Troubleshooting](#-troubleshooting)
 
 ## 🎯 Visão Geral
 
