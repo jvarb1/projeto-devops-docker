@@ -3,6 +3,8 @@
 Este projeto implementa uma aplicação CRUD completa utilizando FastAPI e PostgreSQL, configurada com Docker Compose, volumes persistentes, rede customizada e variáveis de ambiente.
 
 > **Status do CI/CD**: Pipeline automatizado configurado e funcionando.
+> 
+> **Status do IaC**: Infraestrutura como Código implementada com Terraform. O servidor é provisionado automaticamente antes de cada deploy.
 
 ## 📋 Índice
 
@@ -455,11 +457,83 @@ docker network inspect taskapp-network
    docker-compose ps           # Ver status
    ```
 
+## 🏗️ Infraestrutura como Código (IaC)
+
+Este projeto utiliza **Terraform** para gerenciar a infraestrutura de forma automatizada e versionada. A infraestrutura é provisionada automaticamente antes de cada deploy.
+
+### 📋 Visão Geral
+
+- **Terraform**: Ferramenta de IaC para provisionar recursos na nuvem
+- **Provider**: DigitalOcean (pode ser adaptado para AWS, Azure, etc.)
+- **Backend Remoto**: Estado do Terraform armazenado remotamente (Terraform Cloud, S3, etc.)
+- **Cloud-Init**: Servidor é configurado automaticamente com Docker e Docker Compose ao ser criado
+
+### 🚀 Configuração Inicial do Terraform
+
+#### 1. Instalar Terraform
+
+**Windows:**
+```powershell
+choco install terraform
+```
+
+**Linux/macOS:**
+```bash
+brew install terraform
+```
+
+#### 2. Configurar Variáveis Locais
+
+1. Copie o arquivo de exemplo:
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+2. Edite `terraform/terraform.tfvars` com suas credenciais:
+```hcl
+do_token = "seu-token-da-digitalocean"
+project_name = "projeto-devops"
+droplet_region = "nyc1"
+droplet_size = "s-1vcpu-1gb"
+```
+
+**⚠️ IMPORTANTE:** Nunca faça commit do arquivo `terraform.tfvars`!
+
+#### 3. Configurar Backend Remoto
+
+Para que o GitHub Actions possa gerenciar a infraestrutura, você precisa configurar um backend remoto. Veja `terraform/backend.tf.example` para opções.
+
+**Opção Recomendada: Terraform Cloud**
+1. Crie uma conta em https://app.terraform.io
+2. Crie uma organização e workspace
+3. Copie `terraform/backend.tf.example` para `terraform/backend.tf` e configure
+
+#### 4. Testar Localmente
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+Para mais detalhes, consulte o [README do Terraform](terraform/README.md).
+
+### 🔐 Pré-requisitos de Infraestrutura
+
+O servidor é provisionado automaticamente com:
+- ✅ **Docker** instalado via Cloud-Init
+- ✅ **Docker Compose** instalado via Cloud-Init
+- ✅ **Chave SSH** injetada automaticamente
+- ✅ **IP Público** disponível via output do Terraform
+
+**Nota**: O servidor nasce "pelado" mas é configurado automaticamente pelo Cloud-Init antes de ficar disponível. Isso elimina a necessidade de configuração manual.
+
 ## 🚀 CI/CD
 
 ![CI/CD Pipeline](https://github.com/jvarb1/projeto-devops-docker/workflows/CI/CD%20Pipeline/badge.svg)
 
-Este projeto implementa um pipeline completo de Integração Contínua (CI) e Entrega Contínua (CD) usando GitHub Actions.
+Este projeto implementa um pipeline completo de Integração Contínua (CI) e Entrega Contínua (CD) usando GitHub Actions, agora com **provisionamento automático de infraestrutura**.
 
 ### Pipeline de CI/CD
 
@@ -476,34 +550,67 @@ O pipeline é executado automaticamente a cada push na branch `main` e realiza a
    - Envia a imagem para o Docker Hub
    - Só executa se os testes passarem
 
-3. **Deploy Automático** (`deploy`)
-   - Conecta-se ao servidor de produção via SSH
-   - Atualiza o código do repositório
+3. **Provisionar Infraestrutura** (`provision-infra`) 🆕
+   - Executa `terraform init` para configurar o backend remoto
+   - Executa `terraform plan` para verificar mudanças
+   - Executa `terraform apply` para criar/atualizar o servidor
+   - Extrai o IP público do servidor criado
+   - Aguarda o servidor estar pronto (Docker instalado via Cloud-Init)
+   - **O servidor é criado automaticamente se não existir!**
+
+4. **Deploy Automático** (`deploy`)
+   - Conecta-se ao servidor provisionado via SSH (IP dinâmico do Terraform)
+   - Clona/atualiza o repositório no servidor
    - Baixa a nova imagem do Docker Hub
-   - Reinicia os containers com a nova versão
+   - Inicia os containers com a nova versão
    - Verifica se o deploy foi bem-sucedido
 
 ### Configuração de Secrets
 
 Para que o pipeline funcione, você precisa configurar os seguintes secrets no GitHub:
 
+#### Secrets de Docker
 1. **DOCKER_USERNAME**: Seu usuário do Docker Hub
 2. **DOCKER_PASSWORD**: Sua senha ou token de acesso do Docker Hub
-3. **SSH_HOST**: IP ou domínio do seu servidor de produção
-4. **SSH_USER**: Usuário para conexão SSH no servidor
-5. **SSH_KEY**: Chave privada SSH para autenticação
-6. **SSH_PORT**: Porta SSH (padrão: 22, opcional)
+
+#### Secrets de Infraestrutura (Terraform) 🆕
+3. **DO_TOKEN**: Token de API da DigitalOcean
+   - Obtenha em: https://cloud.digitalocean.com/account/api/tokens
+4. **TF_API_TOKEN**: Token do Terraform Cloud (se usar Terraform Cloud como backend)
+   - Obtenha em: https://app.terraform.io/app/settings/tokens
+
+#### Secrets de Deploy
+5. **SSH_USER**: Usuário para conexão SSH no servidor (geralmente `root` para DigitalOcean)
+6. **SSH_KEY**: Chave privada SSH para autenticação
+   - Deve corresponder à chave pública configurada no Terraform
+   - Se você não especificar `ssh_key_id` no Terraform, ele criará uma nova chave automaticamente
+   - Para usar uma chave existente, forneça o `ssh_key_id` em `terraform.tfvars` e use a chave privada correspondente no secret `SSH_KEY`
+
+> 💡 **Dica**: Para facilitar, você pode usar a mesma chave SSH que já usa localmente. Basta:
+> 1. Adicionar a chave pública no Terraform (via `ssh_public_key_path` ou `ssh_key_id`)
+> 2. Adicionar a chave privada no secret `SSH_KEY` do GitHub
 
 #### Como configurar os Secrets:
 
-1. Acesse: `https://github.com/SEU_USUARIO/projeto-devops-docker/settings/secrets/actions`
+1. Acesse: `https://github.com/SEU_USUARIO/SEU_REPOSITORIO/settings/secrets/actions`
 2. Clique em "New repository secret"
 3. Adicione cada secret com seu respectivo valor
 4. Salve
 
-### Configuração Inicial do Servidor
+### ⚠️ Migração da Atividade 03 (Oracle Cloud)
 
-Antes do primeiro deploy, você precisa configurar o servidor manualmente. Este guia foi testado em **Oracle Linux 9** com **VM.Standard.E2.1.Micro** (1 OCPU, 1GB RAM).
+> **✅ Boa notícia**: Se você excluiu a VM da Oracle Cloud da Atividade 03, **não há problema algum**! Na verdade, é até melhor, pois:
+> - O Terraform vai criar um servidor novo automaticamente na DigitalOcean
+> - Não há conflito com servidor antigo
+> - Tudo funciona do zero, sem necessidade de migração
+> - O pipeline está totalmente configurado para criar servidor novo
+
+**Se você tinha um servidor na Oracle Cloud:**
+- ❌ **Não precisa mais dele** - O Terraform cria um novo automaticamente
+- ❌ **Não precisa migrar nada** - O pipeline funciona do zero
+- ✅ **Apenas configure os secrets** no GitHub e faça push
+
+A seção abaixo é apenas para referência histórica da Atividade 03. **Você pode ignorá-la completamente** se está começando com a Atividade 04.
 
 #### 1. Conectar ao servidor via SSH
 
@@ -607,17 +714,17 @@ docker-compose -f docker-compose.prod.yml up -d
 docker-compose -f docker-compose.prod.yml ps
 ```
 
-### Observações Importantes para Oracle Linux 9
+### 📝 Notas sobre Oracle Cloud (Atividade 03 - Referência)
 
-1. **Podman vs Docker**: Oracle Linux 9 usa Podman como substituto do Docker. O pacote `podman-docker` fornece compatibilidade com comandos `docker`.
+> **⚠️ Esta seção é apenas para referência da Atividade 03. Com o Terraform (Atividade 04), você não precisa mais da Oracle Cloud!**
 
-2. **Socket do Podman**: É necessário habilitar `podman.socket` para que o docker-compose funcione corretamente.
+Se você estava usando Oracle Cloud na Atividade 03, as observações abaixo eram relevantes. Agora, com Terraform na DigitalOcean, essas configurações não são mais necessárias:
 
-3. **Lingering**: O comando `loginctl enable-linger` permite que os serviços do usuário continuem rodando mesmo após logout.
-
-4. **Swap**: VMs com pouca memória (1GB) precisam de swap para evitar que o OOM Killer mate processos durante instalações.
-
-5. **Locale do PostgreSQL**: O arquivo `docker-compose.prod.yml` usa `--locale=C` em vez de `pt_BR.UTF-8` porque a imagem Alpine não possui locales brasileiros.
+1. **Podman vs Docker**: Oracle Linux 9 usa Podman. Com DigitalOcean (Ubuntu), usamos Docker nativo.
+2. **Socket do Podman**: Não necessário - Docker nativo já funciona.
+3. **Lingering**: Não necessário - Docker roda como serviço do sistema.
+4. **Swap**: DigitalOcean droplets geralmente têm memória suficiente, mas pode ser configurado se necessário.
+5. **Locale do PostgreSQL**: Continua usando `--locale=C` no `docker-compose.prod.yml`.
 
 ### Estrutura do Pipeline
 
@@ -634,14 +741,31 @@ Push para main
     ├─ Tag com SHA do commit
     └─ Push para Docker Hub
     ↓ (se sucesso)
-[3] Deploy Automático
-    ├─ SSH no servidor
-    ├─ Git pull
+[3] Provisionar Infraestrutura 🆕
+    ├─ Terraform init (backend remoto)
+    ├─ Terraform plan
+    ├─ Terraform apply (cria/atualiza servidor)
+    ├─ Extrai IP público
+    └─ Aguarda servidor estar pronto
+    ↓ (se sucesso)
+[4] Deploy Automático
+    ├─ SSH no servidor (IP dinâmico)
+    ├─ Git clone/pull
     ├─ Pull da nova imagem
-    └─ Restart dos containers
+    └─ Inicia containers
     ↓
 ✅ Aplicação atualizada!
 ```
+
+### 🔄 Fluxo Completo
+
+1. **Desenvolvimento Local**: Desenvolva e teste localmente
+2. **Push para GitHub**: Faça push do código para a branch `main`
+3. **CI**: Testes são executados automaticamente
+4. **Build**: Imagem Docker é construída e enviada ao Docker Hub
+5. **IaC**: Terraform provisiona/atualiza a infraestrutura (servidor criado automaticamente se não existir)
+6. **CD**: Aplicação é deployada automaticamente no servidor provisionado
+7. **Verificação**: Pipeline verifica se a aplicação está rodando corretamente
 
 ### Executar Testes Localmente
 
@@ -673,27 +797,87 @@ pytest tests/test_tasks.py::test_create_task -v
 - Em produção, usamos Podman como runtime de containers (compatível com Docker)
 - O deploy é feito automaticamente a cada push na branch `main`
 
-## 🔧 Troubleshooting de Deploy
+## 🔧 Troubleshooting
 
-### Erro: "Killed" durante instalação de pacotes
+### Troubleshooting de Deploy
+
+#### Erro: "Killed" durante instalação de pacotes
 **Causa**: VM com pouca memória (OOM Killer)
-**Solução**: Criar swap de 2GB conforme instruções acima
+**Solução**: Criar swap de 2GB (não necessário com Terraform, pois o servidor já vem configurado)
 
-### Erro: "Cannot connect to Docker daemon" com Podman
-**Causa**: Socket do Podman não está habilitado
-**Solução**: 
-```bash
-sudo loginctl enable-linger $USER
-systemctl --user enable --now podman.socket
-```
+#### Erro: "Cannot connect to Docker daemon"
+**Causa**: Docker não está rodando
+**Solução**: Com Terraform, o Docker é instalado automaticamente via Cloud-Init. Aguarde alguns minutos após a criação do servidor.
 
-### Erro: "Permission denied" no init-db.sql
-**Causa**: Podman rootless tem restrições de permissão em volumes
+#### Erro: "Permission denied" no init-db.sql
+**Causa**: Restrições de permissão em volumes
 **Solução**: O arquivo `docker-compose.prod.yml` não monta o `init-db.sql` em produção
 
-### Erro: Locale "pt_BR.UTF-8" não encontrado
+#### Erro: Locale "pt_BR.UTF-8" não encontrado
 **Causa**: Imagem Alpine do PostgreSQL não possui locales brasileiros
 **Solução**: Usamos `--locale=C` no `docker-compose.prod.yml`
+
+### Troubleshooting do Terraform 🆕
+
+#### Erro: "Provider not found"
+**Solução**:
+```bash
+cd terraform
+terraform init -upgrade
+```
+
+#### Erro: "Invalid token" no GitHub Actions
+**Causa**: Token da DigitalOcean incorreto ou expirado
+**Solução**: 
+1. Verifique se o secret `DO_TOKEN` está configurado corretamente no GitHub
+2. Gere um novo token em: https://cloud.digitalocean.com/account/api/tokens
+
+#### Erro: "Backend configuration changed"
+**Causa**: Backend foi alterado
+**Solução**:
+```bash
+cd terraform
+terraform init -migrate-state
+```
+
+#### Erro: "SSH key not found"
+**Causa**: Chave SSH não existe ou caminho incorreto
+**Solução**: 
+1. Verifique se a chave pública existe no caminho especificado
+2. Ou forneça o ID de uma chave SSH existente na DigitalOcean em `terraform.tfvars`
+
+#### Servidor criado mas Docker não instalado
+**Causa**: Cloud-Init ainda está executando
+**Solução**: 
+- Cloud-Init pode levar 2-5 minutos para completar
+- Verifique os logs: `journalctl -u cloud-init` (via SSH)
+- O pipeline aguarda automaticamente o servidor estar pronto
+
+#### Erro: "State locked" no GitHub Actions
+**Causa**: Outro processo está usando o estado
+**Solução**: 
+- Verifique se há outra execução do pipeline rodando
+- Se necessário, force unlock: `terraform force-unlock <LOCK_ID>`
+
+### Troubleshooting do Pipeline
+
+#### Job "provision-infra" falha
+**Possíveis causas**:
+1. Token da DigitalOcean inválido → Verifique o secret `DO_TOKEN`
+2. Backend não configurado → Configure o backend remoto (Terraform Cloud, S3, etc.)
+3. Quota excedida → Verifique limites da sua conta DigitalOcean
+
+#### Job "deploy" não encontra o servidor
+**Causa**: IP não foi capturado corretamente
+**Solução**: 
+- Verifique o output do job `provision-infra` no GitHub Actions
+- Certifique-se de que o output `droplet_ip` está sendo passado corretamente
+
+#### Servidor criado mas deploy falha
+**Causa**: Servidor ainda não está pronto (Cloud-Init em execução)
+**Solução**: O pipeline aguarda automaticamente, mas se falhar:
+- Aumente o tempo de espera no workflow
+- Verifique se a chave SSH está correta
 
 ## 🤝 Contribuindo
 

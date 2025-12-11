@@ -1,0 +1,217 @@
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    oci = {
+      source  = "oracle/oci"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "oci" {
+  tenancy_ocid     = var.tenancy_ocid
+  user_ocid        = var.user_ocid
+  fingerprint      = var.fingerprint
+  private_key_path = var.private_key_path
+  region           = var.region
+}
+
+# Buscar imagem Oracle Linux
+data "oci_core_images" "oracle_linux" {
+  compartment_id           = var.compartment_ocid
+  operating_system         = "Oracle Linux"
+  operating_system_version = "9"
+  shape                    = "VM.Standard.E2.1.Micro"
+  sort_by                  = "TIMECREATED"
+  sort_order               = "DESC"
+}
+
+# Buscar Availability Domain
+data "oci_identity_availability_domains" "ads" {
+  compartment_id = var.tenancy_ocid
+}
+
+# Criar VCN (se não existir)
+resource "oci_core_vcn" "app_vcn" {
+  count          = var.create_vcn ? 1 : 0
+  compartment_id = var.compartment_ocid
+  cidr_blocks    = ["10.0.0.0/16"]
+  display_name   = "${var.project_name}-vcn"
+  dns_label      = "${var.project_name}vcn"
+  
+  freeform_tags = {
+    Project = var.project_name
+  }
+}
+
+# Criar Internet Gateway (para acesso público)
+resource "oci_core_internet_gateway" "app_igw" {
+  count          = var.create_vcn ? 1 : 0
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.app_vcn[0].id
+  display_name   = "${var.project_name}-igw"
+  enabled        = true
+}
+
+# Criar Route Table (para rotear tráfego para Internet Gateway)
+resource "oci_core_route_table" "app_route_table" {
+  count          = var.create_vcn ? 1 : 0
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.app_vcn[0].id
+  display_name   = "${var.project_name}-route-table"
+
+  route_rules {
+    network_entity_id = oci_core_internet_gateway.app_igw[0].id
+    destination       = "0.0.0.0/0"
+    destination_type  = "CIDR_BLOCK"
+  }
+}
+
+# Criar Security List (regras de firewall)
+resource "oci_core_security_list" "app_security_list" {
+  count          = var.create_vcn ? 1 : 0
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.app_vcn[0].id
+  display_name   = "${var.project_name}-security-list"
+
+  # Permitir SSH (porta 22)
+  ingress_security_rules {
+    protocol    = "6" # TCP
+    source      = "0.0.0.0/0"
+    source_type = "CIDR_BLOCK"
+    tcp_options {
+      min = 22
+      max = 22
+    }
+  }
+
+  # Permitir HTTP (porta 80)
+  ingress_security_rules {
+    protocol    = "6" # TCP
+    source      = "0.0.0.0/0"
+    source_type = "CIDR_BLOCK"
+    tcp_options {
+      min = 80
+      max = 80
+    }
+  }
+
+  # Permitir HTTPS (porta 443)
+  ingress_security_rules {
+    protocol    = "6" # TCP
+    source      = "0.0.0.0/0"
+    source_type = "CIDR_BLOCK"
+    tcp_options {
+      min = 443
+      max = 443
+    }
+  }
+
+  # Permitir porta 8000 (aplicação)
+  ingress_security_rules {
+    protocol    = "6" # TCP
+    source      = "0.0.0.0/0"
+    source_type = "CIDR_BLOCK"
+    tcp_options {
+      min = 8000
+      max = 8000
+    }
+  }
+
+  # Permitir todo tráfego de saída
+  egress_security_rules {
+    protocol         = "all"
+    destination      = "0.0.0.0/0"
+    destination_type = "CIDR_BLOCK"
+  }
+}
+
+# Criar Subnet pública
+resource "oci_core_subnet" "app_subnet" {
+  count                      = var.create_vcn ? 1 : 0
+  compartment_id             = var.compartment_ocid
+  vcn_id                     = oci_core_vcn.app_vcn[0].id
+  cidr_block                 = "10.0.1.0/24"
+  display_name               = "${var.project_name}-subnet"
+  dns_label                  = "${var.project_name}subnet"
+  security_list_ids          = [oci_core_security_list.app_security_list[0].id]
+  route_table_id             = oci_core_route_table.app_route_table[0].id
+  prohibit_public_ip_on_vnic = false # Subnet pública
+  
+  freeform_tags = {
+    Project = var.project_name
+  }
+}
+
+# Usar VCN/Subnet existente ou criada
+locals {
+  vcn_id = var.create_vcn ? oci_core_vcn.app_vcn[0].id : var.vcn_id
+  subnet_id = var.create_vcn ? oci_core_subnet.app_subnet[0].id : var.subnet_id
+}
+
+# Criar instância
+resource "oci_core_instance" "app_server" {
+  compartment_id      = var.compartment_ocid
+  availability_domain = var.availability_domain != "" ? var.availability_domain : data.oci_identity_availability_domains.ads.availability_domains[0].name
+  display_name        = "${var.project_name}-server"
+  shape               = "VM.Standard.E2.1.Micro"  # Always Free
+
+  source_details {
+    source_type = "image"
+    image_id    = data.oci_core_images.oracle_linux.images[0].id
+  }
+
+  create_vnic_details {
+    subnet_id        = local.subnet_id
+    assign_public_ip = true
+  }
+
+  metadata = {
+    ssh_authorized_keys = file(var.ssh_public_key_path)
+    user_data = base64encode(<<-EOF
+      #!/bin/bash
+      set -e
+      
+      echo "=========================================="
+      echo "Configurando servidor via Cloud-Init"
+      echo "=========================================="
+      
+      # Atualizar sistema
+      sudo dnf update -y
+      
+      # Instalar dependências básicas
+      sudo dnf install -y git curl wget
+      
+      # Instalar Docker
+      sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      
+      # Adicionar usuário opc ao grupo docker
+      sudo usermod -aG docker opc
+      
+      # Instalar Docker Compose standalone
+      sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      sudo chmod +x /usr/local/bin/docker-compose
+      
+      # Habilitar Docker no boot
+      sudo systemctl enable docker
+      sudo systemctl start docker
+      
+      # Verificar instalações
+      docker --version || echo "Docker instalado"
+      docker compose version || echo "Docker Compose instalado"
+      docker-compose --version || echo "Docker Compose standalone instalado"
+      
+      echo "=========================================="
+      echo "Configuração concluída!"
+      echo "=========================================="
+    EOF
+    )
+  }
+
+  freeform_tags = {
+    Project = var.project_name
+  }
+}
+

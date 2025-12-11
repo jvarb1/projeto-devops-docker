@@ -1,0 +1,35 @@
+# Configuração para Oracle Cloud Infrastructure (OCI)
+# Copie este arquivo para terraform.tfvars e preencha com seus valores
+# NUNCA faça commit do arquivo terraform.tfvars!
+
+# Credenciais OCI (obtenha no console da Oracle Cloud)
+tenancy_ocid     = "ocid1.tenancy.oc1..xxxxx"
+user_ocid         = "ocid1.user.oc1..xxxxx"
+fingerprint       = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+private_key_path  = "~/.oci/api_key.pem"
+
+# Compartment OCID
+compartment_ocid  = "ocid1.compartment.oc1..xxxxx"
+
+# Região
+region            = "us-ashburn-1"  # ou outra região disponível
+
+# Availability Domain (geralmente AD-1, AD-2 ou AD-3)
+# Deixe vazio para usar a primeira disponível automaticamente
+availability_domain = ""
+
+# Opção 1: Deixar o Terraform criar VCN e Subnet automaticamente (recomendado)
+create_vcn = true
+# vcn_id e subnet_id não são necessários se create_vcn = true
+
+# Opção 2: Usar VCN e Subnet existentes
+# create_vcn = false
+# vcn_id   = "ocid1.vcn.oc1.xxxxx"
+# subnet_id = "ocid1.subnet.oc1.xxxxx"
+
+# Nome do projeto
+project_name = "projeto-devops"
+
+# Chave SSH
+ssh_public_key_path = "C:/Users/contr/.ssh/id_ed25519_terraform.pub"
+

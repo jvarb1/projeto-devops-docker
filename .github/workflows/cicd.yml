@@ -1,206 +1,294 @@
 name: CI/CD Pipeline
 
-# Pipeline automatizado de CI/CD que executa:
-# 1. Testes unitários (pytest)
-# 2. Build e push da imagem Docker para Docker Hub
-# 3. Deploy automático no servidor de produção via SSH
-
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 env:
-  DOCKER_IMAGE: projeto-devops
-  DOCKER_REGISTRY: docker.io
+  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/projeto-devops
+  TERRAFORM_DIR: ./terraform
 
 jobs:
+  # Job 1: Testes Unitários
   test:
-    name: Run Tests
+    name: Testes Unitários
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Executar testes
         run: |
           pytest tests/ -v --tb=short
 
+  # Job 2: Build e Push da Imagem Docker
   build-and-push:
-    name: Build and Push Docker Image
+    name: Build e Push Docker
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
-      - name: Checkout code
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
+      - name: Login no Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
+      - name: Extrair metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}
+          images: ${{ env.DOCKER_IMAGE }}
           tags: |
-            type=sha,prefix={{branch}}-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest
 
-      - name: Build and push Docker image
+      - name: Build e Push
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      - name: Set image tag for deploy
-        id: image-tag
-        run: |
-          SHA=$(git rev-parse --short HEAD)
-          IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:main-${SHA}"
-          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "Built and pushed image with tag: ${IMAGE_TAG}"
-
-  deploy:
-    name: Deploy to Production
+  # Job 3: Provisionar Infraestrutura
+  provision-infra:
+    name: Provisionar Infraestrutura
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    timeout-minutes: 30
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    outputs:
+      instance_ip: ${{ steps.terraform-output.outputs.instance_ip }}
     
     steps:
-      - name: Checkout code
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Get image tag from build job
-        id: image-tag
-        run: |
-          SHA=$(git rev-parse --short HEAD)
-          IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/projeto-devops:main-${SHA}"
-          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${IMAGE_TAG}"
-          echo "Also trying latest tag as fallback"
-
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          command_timeout: 20m
-          script: |
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Configurar chave privada OCI
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/api_key.pem
+          chmod 600 ~/.oci/api_key.pem
+
+      - name: Terraform Init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+          TF_VAR_private_key_path: ~/.oci/api_key.pem
+          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
+          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
+          TF_VAR_region: ${{ secrets.OCI_REGION }}
+        run: |
+          terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+          TF_VAR_private_key_path: ~/.oci/api_key.pem
+          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
+          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
+          TF_VAR_region: ${{ secrets.OCI_REGION }}
+        run: |
+          terraform apply -auto-approve tfplan
+
+      - name: Obter Output do IP
+        id: terraform-output
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+          TF_VAR_private_key_path: ~/.oci/api_key.pem
+          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
+          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
+          TF_VAR_region: ${{ secrets.OCI_REGION }}
+        run: |
+          INSTANCE_IP=$(terraform output -raw instance_ip)
+          echo "instance_ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+          echo "IP do servidor: $INSTANCE_IP"
+
+      - name: Configurar SSH para verificação
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ steps.terraform-output.outputs.instance_ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Aguardar servidor estar pronto
+        run: |
+          echo "Aguardando servidor estar pronto (Cloud-Init pode levar 2-5 minutos)..."
+          INSTANCE_IP="${{ steps.terraform-output.outputs.instance_ip }}"
+          SSH_USER="${{ secrets.SSH_USER }}"
+          
+          # Aguardar inicial (Cloud-Init precisa de tempo)
+          sleep 60
+          
+          # Tentar conectar via SSH para verificar se está pronto
+          for i in {1..20}; do
+            if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \
+               -i ~/.ssh/deploy_key \
+               $SSH_USER@$INSTANCE_IP \
+               "docker --version && docker compose version" 2>/dev/null; then
+              echo "✅ Servidor está pronto! Docker instalado."
+              break
+            fi
+            echo "Tentativa $i/20 - aguardando Cloud-Init completar..."
+            sleep 15
+          done
+          
+          # Verificação final
+          if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+             -i ~/.ssh/deploy_key \
+             $SSH_USER@$INSTANCE_IP \
+             "docker --version" 2>/dev/null; then
+            echo "✅ Servidor verificado e pronto para deploy!"
+          else
+            echo "⚠️ Aviso: Servidor pode ainda estar inicializando. Deploy continuará..."
+          fi
+
+  # Job 4: Deploy da Aplicação
+  deploy:
+    name: Deploy Automático
+    needs: [build-and-push, provision-infra]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ needs.provision-infra.outputs.instance_ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy no servidor
+        env:
+          INSTANCE_IP: ${{ needs.provision-infra.outputs.instance_ip }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              $SSH_USER@$INSTANCE_IP << 'ENDSSH'
             set -e
             
-            # Verificar pré-requisitos (instalação manual necessária)
-            if ! command -v git &> /dev/null; then
-              echo "ERRO: Git nao esta instalado."
-              echo "Execute no servidor: sudo apt-get update && sudo apt-get install -y git"
-              echo "Ou para Oracle Linux: sudo yum install -y git"
-              exit 1
-            fi
-            echo "Git encontrado: $(git --version)"
+            echo "=========================================="
+            echo "Iniciando deploy da aplicação"
+            echo "=========================================="
             
-            if ! command -v docker &> /dev/null; then
-              echo "ERRO: Docker nao esta instalado."
-              echo "Execute no servidor: curl -fsSL https://get.docker.com | sudo sh"
-              echo "Depois: sudo usermod -aG docker $USER && newgrp docker"
-              exit 1
-            fi
-            echo "Docker encontrado: $(docker --version)"
+            # Criar diretório do projeto se não existir
+            mkdir -p ~/projeto-devops
+            cd ~/projeto-devops
             
-            if ! command -v docker compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
-              echo "ERRO: Docker Compose nao esta instalado."
-              echo "Execute no servidor:"
-              echo "  sudo curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
-              echo "  sudo chmod +x /usr/local/bin/docker-compose"
-              exit 1
-            fi
-            if command -v docker compose &> /dev/null; then
-              echo "Docker Compose encontrado: $(docker compose version)"
+            # Clonar ou atualizar repositório
+            if [ -d ".git" ]; then
+              echo "Atualizando repositório..."
+              git pull origin main
             else
-              echo "Docker Compose encontrado: $(docker-compose --version)"
+              echo "Clonando repositório..."
+              git clone https://github.com/${{ github.repository }}.git .
             fi
             
-            PROJECT_DIR="$HOME/projeto-devops-docker"
+            # Login no Docker Hub
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
             
-            if [ ! -d "$PROJECT_DIR" ]; then
-              echo "Diretorio nao existe. Clonando repositorio..."
-              git clone https://github.com/jvarb1/projeto-devops-docker.git "$PROJECT_DIR"
+            # Baixar nova imagem
+            echo "Baixando nova imagem Docker..."
+            docker pull ${{ env.DOCKER_IMAGE }}:latest || true
+            
+            # Criar arquivo .env se não existir
+            if [ ! -f .env ]; then
+              echo "Criando arquivo .env..."
+              cat > .env << EOF
+            DB_NAME=taskdb
+            DB_USER=taskuser
+            DB_PASSWORD=$(openssl rand -base64 32)
+            DB_PORT=5432
+            APP_PORT=8000
+            DOCKER_USERNAME=$DOCKER_USERNAME
+            IMAGE_TAG=latest
+            EOF
             fi
             
-            cd "$PROJECT_DIR"
+            # Parar containers existentes
+            echo "Parando containers existentes..."
+            docker-compose -f docker-compose.prod.yml down || true
             
-            export IMAGE_TAG=main-$(git rev-parse --short HEAD)
-            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+            # Iniciar containers com nova imagem
+            echo "Iniciando containers..."
+            docker-compose -f docker-compose.prod.yml up -d
             
-            git fetch origin
-            git reset --hard origin/main
-            git clean -fd
+            # Aguardar aplicação estar pronta
+            echo "Aguardando aplicação estar pronta..."
+            sleep 15
             
-            DOCKER_COMPOSE_CMD="docker compose"
-            if ! command -v docker compose &> /dev/null; then
-              DOCKER_COMPOSE_CMD="docker-compose"
-            fi
+            # Verificar saúde da aplicação
+            echo "Verificando saúde da aplicação..."
+            for i in {1..10}; do
+              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ Aplicação está rodando!"
+                break
+              fi
+              echo "Tentativa $i/10..."
+              sleep 5
+            done
             
-            echo "Baixando nova imagem do Docker Hub..."
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml pull app || echo "Pull falhou, tentando com latest..."
+            # Mostrar status
+            docker-compose -f docker-compose.prod.yml ps
             
-            echo "Parando container antigo se existir..."
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml stop app || true
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml rm -f app || true
-            
-            echo "Iniciando container da aplicacao..."
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d app
-            
-            echo "Status dos containers:"
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps
+            echo "=========================================="
+            echo "Deploy concluído!"
+            echo "=========================================="
+          ENDSSH
 
-      - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          command_timeout: 10m
-          script: |
-            cd "$HOME/projeto-devops-docker"
-            
-            DOCKER_COMPOSE_CMD="docker compose"
-            if ! command -v docker compose &> /dev/null; then
-              DOCKER_COMPOSE_CMD="docker-compose"
-            fi
-            
-            echo "Aguardando containers iniciarem..."
-            sleep 10
-            
-            echo "Status dos containers:"
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps
-            
-            echo "Ultimos logs da aplicacao:"
-            $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml logs app --tail=30
-
+      - name: Verificar deploy
+        run: |
+          INSTANCE_IP="${{ needs.provision-infra.outputs.instance_ip }}"
+          echo "Verificando aplicação em http://$INSTANCE_IP:8000/health"
+          sleep 10
+          curl -f http://$INSTANCE_IP:8000/health || echo "⚠️ Aplicação pode ainda estar iniciando..."

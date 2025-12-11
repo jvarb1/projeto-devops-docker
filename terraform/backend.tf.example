@@ -1,0 +1,41 @@
+# Exemplo de configuração de backend remoto
+# Copie este arquivo para backend.tf e configure conforme sua escolha
+
+# OPÇÃO 1: Terraform Cloud (Recomendado para iniciantes)
+terraform {
+  cloud {
+    organization = "sua-organizacao"
+    workspaces {
+      name = "projeto-devops"
+    }
+  }
+}
+
+# OPÇÃO 2: AWS S3 (com DynamoDB para locking)
+# terraform {
+#   backend "s3" {
+#     bucket         = "seu-bucket-terraform-state"
+#     key            = "projeto-devops/terraform.tfstate"
+#     region         = "us-east-1"
+#     encrypt        = true
+#     dynamodb_table = "terraform-state-lock"
+#   }
+# }
+
+# OPÇÃO 3: DigitalOcean Spaces (compatible com S3)
+# terraform {
+#   backend "s3" {
+#     endpoint   = "https://nyc3.digitaloceanspaces.com"
+#     bucket     = "seu-bucket-terraform-state"
+#     key        = "projeto-devops/terraform.tfstate"
+#     region     = "us-east-1"  # Qualquer região funciona
+#     encrypt    = true
+#     access_key = var.spaces_access_key
+#     secret_key = var.spaces_secret_key
+#   }
+# }
+
+# OPÇÃO 4: Backend local (apenas para desenvolvimento)
+# Comente o bloco backend acima e use backend local
+# O estado será salvo em terraform.tfstate localmente
+

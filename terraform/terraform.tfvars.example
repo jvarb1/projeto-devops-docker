@@ -1,0 +1,25 @@
+# Copie este arquivo para terraform.tfvars e preencha com seus valores
+# NUNCA faça commit do arquivo terraform.tfvars!
+
+# Token de API da DigitalOcean
+# Obtenha em: https://cloud.digitalocean.com/account/api/tokens
+do_token = "seu-token-aqui"
+
+# Nome do projeto
+project_name = "projeto-devops"
+
+# Configurações do Droplet
+droplet_image  = "ubuntu-22-04-x64"
+droplet_region = "nyc1"  # Opções: nyc1, nyc3, sfo3, ams3, sgp1, lon1, fra1, tor1, blr1, etc.
+droplet_size   = "s-1vcpu-1gb"  # Opções: s-1vcpu-1gb, s-1vcpu-2gb, s-2vcpu-2gb, etc.
+
+# Chave SSH
+# Opção 1: Use o ID de uma chave SSH existente na DigitalOcean
+ssh_key_id = ""
+
+# Opção 2: Deixe vazio e forneça o caminho da chave pública (será criada automaticamente)
+# Windows: use o caminho completo ou relativo
+# Exemplo Windows: "C:/Users/seu-usuario/.ssh/id_ed25519_terraform.pub"
+# Exemplo Linux/Mac: "~/.ssh/id_ed25519_terraform.pub"
+ssh_public_key_path = "~/.ssh/id_ed25519_terraform.pub"
+
