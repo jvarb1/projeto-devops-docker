@@ -90,6 +90,27 @@ jobs:
           terraform_version: 1.6.0
           terraform_wrapper: false
 
+      - name: Verificar formato da chave privada OCI
+        run: |
+          echo "Verificando formato da chave privada OCI..."
+          if echo "${{ secrets.OCI_PRIVATE_KEY }}" | grep -q "BEGIN PRIVATE KEY"; then
+            echo "✅ Chave privada contém BEGIN PRIVATE KEY"
+          else
+            echo "❌ ERRO: Chave privada NÃO contém BEGIN PRIVATE KEY"
+            exit 1
+          fi
+          if echo "${{ secrets.OCI_PRIVATE_KEY }}" | grep -q "END PRIVATE KEY"; then
+            echo "✅ Chave privada contém END PRIVATE KEY"
+          else
+            echo "❌ ERRO: Chave privada NÃO contém END PRIVATE KEY"
+            exit 1
+          fi
+          KEY_LINES=$(echo "${{ secrets.OCI_PRIVATE_KEY }}" | wc -l)
+          echo "📊 Número de linhas na chave: $KEY_LINES"
+          if [ "$KEY_LINES" -lt 3 ]; then
+            echo "⚠️ AVISO: Chave privada parece muito curta (menos de 3 linhas)"
+          fi
+
       - name: Terraform Init
         working-directory: ${{ env.TERRAFORM_DIR }}
         env:
