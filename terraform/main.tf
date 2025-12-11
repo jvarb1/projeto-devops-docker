@@ -40,7 +40,7 @@ data "oci_identity_availability_domains" "ads" {
 # Criar instância
 resource "oci_core_instance" "app_server" {
   compartment_id      = var.compartment_ocid
-  availability_domain = var.availability_domain != "" ? var.availability_domain : data.oci_identity_availability_domains.ads.availability_domains[0].name
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
   display_name        = "${var.project_name}-server"
   shape               = "VM.Standard.E2.1.Micro"  # Always Free
 

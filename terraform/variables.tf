@@ -33,11 +33,6 @@ variable "region" {
   default     = "sa-saopaulo-1"
 }
 
-variable "availability_domain" {
-  description = "Availability Domain (ex: AD-1). Deixe vazio para usar a primeira disponível"
-  type        = string
-  default     = ""
-}
 
 variable "vcn_id" {
   description = "OCID da VCN"
