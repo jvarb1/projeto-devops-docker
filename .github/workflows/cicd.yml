@@ -90,14 +90,6 @@ jobs:
           terraform_version: 1.6.0
           terraform_wrapper: false
 
-      - name: Configurar chave privada OCI
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/api_key.pem
-          chmod 600 ~/.oci/api_key.pem
-          echo "Chave privada OCI configurada"
-          ls -la ~/.oci/api_key.pem
-
       - name: Terraform Init
         working-directory: ${{ env.TERRAFORM_DIR }}
         env:

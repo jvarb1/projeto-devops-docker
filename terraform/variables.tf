@@ -17,7 +17,7 @@ variable "fingerprint" {
 }
 
 variable "private_key" {
-  description = "Conteúdo da chave privada da API (obrigatório para Terraform Cloud)"
+  description = "Conteúdo da chave privada da API (obrigatório para Terraform Cloud - execução remota)"
   type        = string
   sensitive   = true
 }
