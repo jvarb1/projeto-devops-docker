@@ -694,17 +694,6 @@ Para que o pipeline funcione, você precisa configurar os seguintes secrets no G
 
 ### ⚠️ Migração da Atividade 03 (Oracle Cloud)
 
-> **✅ Boa notícia**: Se você excluiu a VM da Oracle Cloud da Atividade 03, **não há problema algum**! Na verdade, é até melhor, pois:
-> - O Terraform vai criar um servidor novo automaticamente na Oracle Cloud
-> - Não há conflito com servidor antigo
-> - Tudo funciona do zero, sem necessidade de migração
-> - O pipeline está totalmente configurado para criar servidor novo
-
-**Se você tinha um servidor na Oracle Cloud:**
-- ❌ **Não precisa mais dele** - O Terraform cria um novo automaticamente
-- ❌ **Não precisa migrar nada** - O pipeline funciona do zero
-- ✅ **Apenas configure os secrets** no GitHub e faça push
-
 A seção abaixo é apenas para referência histórica da Atividade 03. **Você pode ignorá-la completamente** se está começando com a Atividade 04.
 
 #### 1. Conectar ao servidor via SSH
