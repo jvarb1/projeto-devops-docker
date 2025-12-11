@@ -50,8 +50,7 @@ variable "project_name" {
   default     = "projeto-devops"
 }
 
-variable "ssh_public_key_path" {
-  description = "Caminho para a chave pública SSH"
+variable "ssh_public_key" {
+  description = "Conteúdo da chave pública SSH (obrigatório para Terraform Cloud - execução remota)"
   type        = string
-  default     = "C:/Users/contr/.ssh/id_ed25519_terraform.pub"
 }

@@ -102,6 +102,7 @@ jobs:
           TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
           TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
           TF_VAR_region: ${{ secrets.OCI_REGION }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           terraform init
 
@@ -117,6 +118,7 @@ jobs:
           TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
           TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
           TF_VAR_region: ${{ secrets.OCI_REGION }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           terraform plan -out=tfplan
 
@@ -132,6 +134,7 @@ jobs:
           TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
           TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
           TF_VAR_region: ${{ secrets.OCI_REGION }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           terraform apply -auto-approve tfplan
 
@@ -148,6 +151,7 @@ jobs:
           TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
           TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
           TF_VAR_region: ${{ secrets.OCI_REGION }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           INSTANCE_IP=$(terraform output -raw instance_ip)
           echo "instance_ip=$INSTANCE_IP" >> $GITHUB_OUTPUT

@@ -55,7 +55,7 @@ resource "oci_core_instance" "app_server" {
   }
 
   metadata = {
-    ssh_authorized_keys = file(var.ssh_public_key_path)
+    ssh_authorized_keys = var.ssh_public_key
     user_data = base64encode(<<-EOF
       #!/bin/bash
       set -e
