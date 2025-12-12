@@ -52,3 +52,4 @@ echo "Tenancy OCID: ${TF_VAR_tenancy_ocid:0:20}..."
 echo "User OCID: ${TF_VAR_user_ocid:0:20}..."
 echo "Fingerprint: $TF_VAR_fingerprint"
 
+

@@ -80,6 +80,18 @@ jobs:
     outputs:
       instance_ip: ${{ steps.terraform-output.outputs.instance_ip }}
     
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+      TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
+      TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+      TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
+      TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
+      TF_VAR_region: ${{ secrets.OCI_REGION }}
+      TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+    
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
@@ -89,6 +101,17 @@ jobs:
         with:
           terraform_version: 1.6.0
           terraform_wrapper: false
+
+      - name: Verificar formatação Terraform
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          echo "Verificando formatação do código Terraform..."
+          terraform fmt -check -recursive || {
+            echo "❌ ERRO: Código Terraform não está formatado corretamente"
+            echo "Execute 'terraform fmt -recursive' para corrigir"
+            exit 1
+          }
+          echo "✅ Formatação Terraform OK"
 
       - name: Verificar formato da chave privada OCI
         run: |
@@ -113,68 +136,38 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TERRAFORM_DIR }}
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
-          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
-          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
-          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
-          TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
-          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
-          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
-          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
-          TF_VAR_region: ${{ secrets.OCI_REGION }}
-          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           terraform init
 
+      - name: Validar configuração Terraform
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          echo "Validando configuração Terraform..."
+          terraform validate || {
+            echo "❌ ERRO: Configuração Terraform inválida"
+            exit 1
+          }
+          echo "✅ Validação Terraform OK"
+
       - name: Terraform Plan
         working-directory: ${{ env.TERRAFORM_DIR }}
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
-          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
-          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
-          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
-          TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
-          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
-          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
-          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
-          TF_VAR_region: ${{ secrets.OCI_REGION }}
-          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           terraform plan -out=tfplan
 
       - name: Terraform Apply
         working-directory: ${{ env.TERRAFORM_DIR }}
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
-          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
-          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
-          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
-          TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
-          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
-          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
-          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
-          TF_VAR_region: ${{ secrets.OCI_REGION }}
-          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           terraform apply -auto-approve tfplan
 
       - name: Obter Output do IP
         id: terraform-output
         working-directory: ${{ env.TERRAFORM_DIR }}
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
-          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
-          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
-          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
-          TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
-          TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
-          TF_VAR_vcn_id: ${{ secrets.OCI_VCN_ID }}
-          TF_VAR_subnet_id: ${{ secrets.OCI_SUBNET_ID }}
-          TF_VAR_region: ${{ secrets.OCI_REGION }}
-          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           INSTANCE_IP=$(terraform output -raw instance_ip)
+          if [ -z "$INSTANCE_IP" ]; then
+            echo "❌ ERRO: Não foi possível obter o IP da instância"
+            exit 1
+          fi
           echo "instance_ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
           echo "IP do servidor: $INSTANCE_IP"
 
@@ -190,31 +183,48 @@ jobs:
           echo "Aguardando servidor estar pronto (Cloud-Init pode levar 2-5 minutos)..."
           INSTANCE_IP="${{ steps.terraform-output.outputs.instance_ip }}"
           SSH_USER="${{ secrets.SSH_USER }}"
+          MAX_ATTEMPTS=30
+          WAIT_TIME=15
+          
+          if [ -z "$INSTANCE_IP" ]; then
+            echo "❌ ERRO: IP da instância não está disponível"
+            exit 1
+          fi
           
           # Aguardar inicial (Cloud-Init precisa de tempo)
+          echo "Aguardando 60 segundos para Cloud-Init iniciar..."
           sleep 60
           
           # Tentar conectar via SSH para verificar se está pronto
-          for i in {1..20}; do
-            if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \
-               -i ~/.ssh/deploy_key \
-               $SSH_USER@$INSTANCE_IP \
-               "docker --version && docker compose version" 2>/dev/null; then
+          echo "Verificando conectividade SSH e instalação do Docker..."
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            if ssh -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=10 \
+                   -o UserKnownHostsFile=/dev/null \
+                   -o BatchMode=yes \
+                   -i ~/.ssh/deploy_key \
+                   $SSH_USER@$INSTANCE_IP \
+                   "docker --version && docker compose version" 2>/dev/null; then
               echo "✅ Servidor está pronto! Docker instalado."
-              break
+              exit 0
             fi
-            echo "Tentativa $i/20 - aguardando Cloud-Init completar..."
-            sleep 15
+            echo "Tentativa $i/$MAX_ATTEMPTS - aguardando Cloud-Init completar..."
+            sleep $WAIT_TIME
           done
           
           # Verificação final
-          if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-             -i ~/.ssh/deploy_key \
-             $SSH_USER@$INSTANCE_IP \
-             "docker --version" 2>/dev/null; then
+          if ssh -o StrictHostKeyChecking=no \
+                 -o ConnectTimeout=10 \
+                 -o UserKnownHostsFile=/dev/null \
+                 -o BatchMode=yes \
+                 -i ~/.ssh/deploy_key \
+                 $SSH_USER@$INSTANCE_IP \
+                 "docker --version" 2>/dev/null; then
             echo "✅ Servidor verificado e pronto para deploy!"
           else
-            echo "⚠️ Aviso: Servidor pode ainda estar inicializando. Deploy continuará..."
+            echo "❌ ERRO: Servidor não está pronto após $MAX_ATTEMPTS tentativas"
+            echo "Cloud-Init pode ainda estar em execução. Verifique manualmente."
+            exit 1
           fi
 
   # Job 4: Deploy da Aplicação
@@ -235,6 +245,35 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ needs.provision-infra.outputs.instance_ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
+      - name: Verificar conectividade SSH
+        run: |
+          INSTANCE_IP="${{ needs.provision-infra.outputs.instance_ip }}"
+          SSH_USER="${{ secrets.SSH_USER }}"
+          
+          if [ -z "$INSTANCE_IP" ]; then
+            echo "❌ ERRO: IP da instância não está disponível"
+            exit 1
+          fi
+          
+          echo "Verificando conectividade SSH com o servidor..."
+          for i in {1..5}; do
+            if ssh -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=10 \
+                   -o UserKnownHostsFile=/dev/null \
+                   -o BatchMode=yes \
+                   -i ~/.ssh/deploy_key \
+                   $SSH_USER@$INSTANCE_IP \
+                   "echo 'Conexão SSH OK'" 2>/dev/null; then
+              echo "✅ Conectividade SSH verificada"
+              exit 0
+            fi
+            echo "Tentativa $i/5 de conexão SSH..."
+            sleep 5
+          done
+          
+          echo "❌ ERRO: Não foi possível conectar ao servidor via SSH"
+          exit 1
+
       - name: Deploy no servidor
         env:
           INSTANCE_IP: ${{ needs.provision-infra.outputs.instance_ip }}
@@ -244,8 +283,9 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
               $SSH_USER@$INSTANCE_IP << 'ENDSSH'
-            set -e
+            set -euo pipefail
             
             echo "=========================================="
             echo "Iniciando deploy da aplicação"
@@ -253,23 +293,37 @@ jobs:
             
             # Criar diretório do projeto se não existir
             mkdir -p ~/projeto-devops
-            cd ~/projeto-devops
+            cd ~/projeto-devops || {
+              echo "❌ ERRO: Não foi possível acessar o diretório do projeto"
+              exit 1
+            }
             
             # Clonar ou atualizar repositório
             if [ -d ".git" ]; then
               echo "Atualizando repositório..."
-              git pull origin main
+              git pull origin main || {
+                echo "⚠️ Aviso: Falha ao atualizar repositório, continuando..."
+              }
             else
               echo "Clonando repositório..."
-              git clone https://github.com/${{ github.repository }}.git .
+              git clone https://github.com/${{ github.repository }}.git . || {
+                echo "❌ ERRO: Falha ao clonar repositório"
+                exit 1
+              }
             fi
             
             # Login no Docker Hub
-            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+            echo "Fazendo login no Docker Hub..."
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin || {
+              echo "❌ ERRO: Falha ao fazer login no Docker Hub"
+              exit 1
+            }
             
             # Baixar nova imagem
             echo "Baixando nova imagem Docker..."
-            docker pull ${{ env.DOCKER_IMAGE }}:latest || true
+            docker pull ${{ env.DOCKER_IMAGE }}:latest || {
+              echo "⚠️ Aviso: Falha ao baixar nova imagem, usando imagem local se disponível"
+            }
             
             # Criar arquivo .env se não existir
             if [ ! -f .env ]; then
@@ -291,7 +345,11 @@ jobs:
             
             # Iniciar containers com nova imagem
             echo "Iniciando containers..."
-            docker-compose -f docker-compose.prod.yml up -d
+            docker-compose -f docker-compose.prod.yml up -d || {
+              echo "❌ ERRO: Falha ao iniciar containers"
+              docker-compose -f docker-compose.prod.yml logs
+              exit 1
+            }
             
             # Aguardar aplicação estar pronta
             echo "Aguardando aplicação estar pronta..."
@@ -299,26 +357,54 @@ jobs:
             
             # Verificar saúde da aplicação
             echo "Verificando saúde da aplicação..."
-            for i in {1..10}; do
-              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-                echo "✅ Aplicação está rodando!"
+            HEALTH_CHECK_PASSED=false
+            for i in {1..15}; do
+              if curl -f -s http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ Aplicação está rodando e saudável!"
+                HEALTH_CHECK_PASSED=true
                 break
               fi
-              echo "Tentativa $i/10..."
+              echo "Tentativa $i/15 - aguardando aplicação..."
               sleep 5
             done
             
+            if [ "$HEALTH_CHECK_PASSED" = false ]; then
+              echo "❌ ERRO: Health check falhou após 15 tentativas"
+              echo "Logs dos containers:"
+              docker-compose -f docker-compose.prod.yml logs --tail=50
+              exit 1
+            fi
+            
             # Mostrar status
+            echo "Status dos containers:"
             docker-compose -f docker-compose.prod.yml ps
             
             echo "=========================================="
-            echo "Deploy concluído!"
+            echo "✅ Deploy concluído com sucesso!"
             echo "=========================================="
           ENDSSH
 
       - name: Verificar deploy
         run: |
           INSTANCE_IP="${{ needs.provision-infra.outputs.instance_ip }}"
+          
+          if [ -z "$INSTANCE_IP" ]; then
+            echo "❌ ERRO: IP da instância não está disponível"
+            exit 1
+          fi
+          
           echo "Verificando aplicação em http://$INSTANCE_IP:8000/health"
           sleep 10
-          curl -f http://$INSTANCE_IP:8000/health || echo "⚠️ Aplicação pode ainda estar iniciando..."
+          
+          for i in {1..5}; do
+            if curl -f -s http://$INSTANCE_IP:8000/health > /dev/null 2>&1; then
+              echo "✅ Aplicação está acessível e respondendo corretamente!"
+              exit 0
+            fi
+            echo "Tentativa $i/5 de verificação externa..."
+            sleep 5
+          done
+          
+          echo "⚠️ Aviso: Aplicação pode ainda estar iniciando ou há problema de conectividade"
+          echo "Verifique manualmente: http://$INSTANCE_IP:8000/health"
+          exit 1
